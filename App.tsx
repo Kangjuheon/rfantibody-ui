@@ -33,20 +33,25 @@ export default function App() {
   const [targetFile, setTargetFile] = useState<File | null>(
     null,
   );
-  const [hotspots, setHotspots] = useState("A21, B14-21");
-  const [rfDiffusionDesigns, setRfDiffusionDesigns] =
-    useState("1");
-  const [proteinMPNNDesigns, setProteinMPNNDesigns] =
-    useState("1");
-  const [designLoops, setDesignLoops] = useState(
-    "H1_, H2.7, H3.5-13, L1.10-15, L2.10-15, L3.10-15",
-  );
+  const [hotspots, setHotspots] = useState("");
+  const [hotspotsIsPlaceholder, setHotspotsIsPlaceholder] = useState(true);
+  const [rfDiffusionDesigns, setRfDiffusionDesigns] = useState("1");
+  const [proteinMPNNDesigns, setProteinMPNNDesigns] = useState("1");
+  const [designLoops, setDesignLoops] = useState("");
+  const [designLoopsIsPlaceholder, setDesignLoopsIsPlaceholder] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
+
+  // Default placeholder values
+  const defaultHotspots = "A21, B14-21";
+  const defaultDesignLoops = "H1_, H2.7, H3.5-13, L1.10-15, L2.10-15, L3.10-15";
 
   // Generate default job name with current timestamp
   const generateDefaultJobName = () => {
     const now = new Date();
-    const timestamp = now.toISOString().slice(0, 19).replace(/[:.]/g, '-');
+    const timestamp = now
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[:.]/g, "-");
     return `RFantibody_${timestamp}`;
   };
 
@@ -55,12 +60,23 @@ export default function App() {
     return jobName.trim() || generateDefaultJobName();
   };
 
+  // Get effective values (use input or default)
+  const getEffectiveHotspots = () => {
+    return hotspotsIsPlaceholder ? defaultHotspots : hotspots;
+  };
+
+  const getEffectiveDesignLoops = () => {
+    return designLoopsIsPlaceholder ? defaultDesignLoops : designLoops;
+  };
+
   // Check if all required fields are filled
   const isFormValid = () => {
+    const effectiveHotspots = getEffectiveHotspots();
+    
     return (
       frameworkFile !== null &&
       targetFile !== null &&
-      hotspots.trim() !== "" &&
+      effectiveHotspots.trim() !== "" &&
       parseInt(rfDiffusionDesigns) > 0 &&
       parseInt(proteinMPNNDesigns) > 0
     );
@@ -70,25 +86,25 @@ export default function App() {
     if (!isFormValid()) return;
 
     const effectiveJobName = getEffectiveJobName();
-    
+
     setIsRunning(true);
-    
+
     // Create job data object
     const jobData = {
       jobName: effectiveJobName,
       mode,
       frameworkFile: frameworkFile?.name,
       targetFile: targetFile?.name,
-      hotspots,
+      hotspots: getEffectiveHotspots(),
       rfDiffusionDesigns: parseInt(rfDiffusionDesigns),
       proteinMPNNDesigns: parseInt(proteinMPNNDesigns),
-      designLoops,
+      designLoops: getEffectiveDesignLoops(),
       createdAt: new Date().toISOString(),
-      status: 'submitted'
+      status: "submitted",
     };
 
-    console.log('Job Data:', jobData);
-    
+    console.log("Job Data:", jobData);
+
     // Simulate job processing
     setTimeout(() => {
       setIsRunning(false);
@@ -100,7 +116,14 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      <div className="max-w-4xl mx-auto p-6 bg-background min-h-screen">
+      <div className="min-h-screen bg-background relative">
+        {/* Top decorative band */}
+        <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-r from-blue-500/30 via-purple-600/40 to-blue-500/30 shadow-sm"></div>
+        
+        {/* Bottom decorative band */}
+        <div className="absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-r from-purple-600/30 via-blue-500/40 to-purple-600/30 shadow-sm"></div>
+        
+      <div className="max-w-4xl mx-auto px-6 py-8 relative z-10">
         {/* Header */}
         <div className="mb-8 relative">
           <div className="absolute top-0 right-0">
@@ -150,7 +173,10 @@ export default function App() {
               />
               {!jobName.trim() && (
                 <p className="text-xs text-muted-foreground">
-                  Will use default name: <span className="font-mono">{generateDefaultJobName()}</span>
+                  Will use default name:{" "}
+                  <span className="font-mono">
+                    {generateDefaultJobName()}
+                  </span>
                 </p>
               )}
             </div>
@@ -262,9 +288,70 @@ export default function App() {
               <Input
                 id="hotspots"
                 placeholder="e.g., A21, B14-21"
-                value={hotspots}
-                onChange={(e) => setHotspots(e.target.value)}
-                className="w-full"
+                autoComplete="off"
+                value={hotspotsIsPlaceholder ? defaultHotspots : hotspots}
+                onFocus={() => {
+                  if (hotspotsIsPlaceholder) {
+                    setHotspots("");
+                    setHotspotsIsPlaceholder(false);
+                  }
+                }}
+                onChange={(e) => {
+                  setHotspots(e.target.value);
+                  setHotspotsIsPlaceholder(false);
+                }}
+                onBlur={(e) => {
+                  if (e.target.value.trim() === "") {
+                    setHotspotsIsPlaceholder(true);
+                  }
+                }}
+                className={`w-full ${hotspotsIsPlaceholder ? "text-muted-foreground" : ""}`}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label
+                htmlFor="designLoops"
+                className="flex items-center gap-2"
+              >
+                Design Loops
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-md">
+                      Specify which CDR loops (H1, H2, H3, L1,
+                      L2, L3) to design and optionally constrain
+                      their lengths. Each item follows the
+                      format: 'LOOP', 'LOOP:LENGTH' or
+                      'LOOP:START-END'. Examples: 'H1', 'L2:7',
+                      'H3:5-13'. If omitted, loops remain fixed
+                      from the input framework.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </Label>
+              <Input
+                id="designLoops"
+                placeholder="e.g., H1, H2:7, H3:5-13, L1:10-15"
+                autoComplete="off"
+                value={designLoopsIsPlaceholder ? defaultDesignLoops : designLoops}
+                onFocus={() => {
+                  if (designLoopsIsPlaceholder) {
+                    setDesignLoops("");
+                    setDesignLoopsIsPlaceholder(false);
+                  }
+                }}
+                onChange={(e) => {
+                  setDesignLoops(e.target.value);
+                  setDesignLoopsIsPlaceholder(false);
+                }}
+                onBlur={(e) => {
+                  if (e.target.value.trim() === "") {
+                    setDesignLoopsIsPlaceholder(true);
+                  }
+                }}
+                className={`w-full ${designLoopsIsPlaceholder ? "text-muted-foreground" : ""}`}
               />
             </div>
           </CardContent>
@@ -346,46 +433,6 @@ export default function App() {
           </CardContent>
         </Card>
 
-        {/* Advanced Settings */}
-        <Card className="mb-8">
-          <CardHeader className="pb-3">
-            <CardTitle>Advanced Settings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label
-                htmlFor="designLoops"
-                className="flex items-center gap-2"
-              >
-                Design Loops
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Info className="w-4 h-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-md">
-                      Specify which CDR loops (H1, H2, H3, L1,
-                      L2, L3) to design and optionally constrain
-                      their lengths. Each item follows the
-                      format: 'LOOP', 'LOOP:LENGTH' or
-                      'LOOP:START-END'. Examples: 'H1', 'L2:7',
-                      'H3:5-13'. If omitted, loops remain fixed
-                      from the input framework.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </Label>
-              <Input
-                id="designLoops"
-                placeholder="e.g., H1, H2:7, H3:5-13, L1:10-15"
-                value={designLoops}
-                onChange={(e) => setDesignLoops(e.target.value)}
-                className="w-full"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Submit Section */}
         <Card
           className={`border-2 ${isFormValid() ? "border-primary/30 bg-primary/5" : "border-dashed border-muted-foreground/20"}`}
@@ -428,7 +475,7 @@ export default function App() {
                       {!targetFile && (
                         <li>• Target Structure</li>
                       )}
-                      {!hotspots.trim() && <li>• Hotspots</li>}
+                      {getEffectiveHotspots().trim() === "" && <li>• Hotspots</li>}
                     </ul>
                   </div>
                 )}
@@ -456,9 +503,15 @@ export default function App() {
             </div>
           </CardContent>
         </Card>
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <span>Developed by University of Seoul & KAIST</span>
+        {/* Footer */}
+        <div className="mt-12 flex justify-end">
+          <div className="bg-background/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-border/30 shadow-sm">
+            <span className="text-xs text-muted-foreground">
+              Developed by University of Seoul & KAIST
+            </span>
+          </div>
         </div>
+      </div>
       </div>
     </TooltipProvider>
   );
