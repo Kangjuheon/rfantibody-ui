@@ -1,45 +1,55 @@
-import { useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import React, { useRef } from "react";
+import { Upload } from "lucide-react";
 
-type Props = {
-  onFileSelect: (f: File | null) => void;
+interface FileUploadProps {
+  label: string;
   selectedFile: File | null;
-  label?: string;
-};
+  onFileSelect: (file: File | null) => void;
+}
 
-export function FileUpload({ onFileSelect, selectedFile, label }: Props) {
-  const ref = useRef<HTMLInputElement | null>(null);
+export const FileUpload: React.FC<FileUploadProps> = ({
+  label,
+  selectedFile,
+  onFileSelect,
+}) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] ?? null;
-    onFileSelect(f);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    onFileSelect(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0] || null;
+    onFileSelect(file);
   };
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex-1">
-        {label && <Label className="mb-1 block">{label}</Label>}
-        <Input
-          ref={ref}
-          type="file"
-          onChange={handleChange}
-          className="w-full"
-        />
-      </div>
+    <div
+      className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/30 transition"
+      onClick={() => inputRef.current?.click()}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleDrop}
+    >
+      <input
+        type="file"
+        accept=".pdb"
+        ref={inputRef}
+        onChange={handleFileChange}
+        className="hidden"
+      />
       {selectedFile ? (
-        <span className="text-sm text-muted-foreground truncate max-w-[200px]">
+        <p className="text-sm text-foreground">
           {selectedFile.name}
-        </span>
-      ) : null}
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={() => ref.current?.click()}
-      >
-        선택
-      </Button>
+        </p>
+      ) : (
+        <div className="flex flex-col items-center text-muted-foreground">
+          <Upload className="w-6 h-6 mb-2" />
+          <p className="font-medium">{label}</p>
+          <p className="text-xs">Drop PDB file here or click to browse</p>
+        </div>
+      )}
     </div>
   );
-}
+};
