@@ -3,10 +3,19 @@ from typing import Dict, Any
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 import shutil, os
-
+from loguru import logger
 from pipeline import orchestrate_pipeline
+from fastapi.staticfiles import StaticFiles
+from fastapi import HTTPException
+from fastapi.responses import FileResponse
+from pathlib import Path
+import shutil, tempfile, os
+
+JOBS_ROOT = Path(os.getenv("JOBS_ROOT", "/data/jobs"))
 
 app = FastAPI()
+
+app.mount("/files/jobs", StaticFiles(directory="/data/jobs"), name="jobfiles")
 
 def save_upload(u: UploadFile) -> Path:
     suffix = "_" + u.filename.replace("/", "_")
@@ -40,11 +49,39 @@ async def rfantibody_pipeline(
             target_path_host=tg,
         )
         return result
+    except Exception as e:
+        logger.info(f"Exception during pipeline execution: {e}")
     finally:
-        # 실패 시 임시파일 정리 (성공 시 orchestrate_pipeline 내부에서 job 디렉터리로 이동함)
+        
         if fw.exists() and fw.parent == Path("/tmp"):
             try: fw.unlink()
             except: pass
         if tg.exists() and tg.parent == Path("/tmp"):
             try: tg.unlink()
             except: pass
+
+def safe_job_dir(job_id: str) -> Path:
+    
+    p = (JOBS_ROOT / job_id).resolve()
+    if not str(p).startswith(str(JOBS_ROOT.resolve())):
+        raise HTTPException(status_code=400, detail="invalid job id")
+    return p
+
+@app.get("/jobs/{job_id}/archive")
+def download_job_archive(job_id: str):
+    job_dir = safe_job_dir(job_id)
+    out_dir = job_dir / "output"
+    if not out_dir.exists():
+        raise HTTPException(status_code=404, detail="output not found")
+
+    tmpdir = tempfile.mkdtemp()
+    zip_path = Path(tmpdir) / f"{job_id}_output.zip"
+    
+    shutil.make_archive(zip_path.with_suffix(""), "zip", root_dir=out_dir)
+    
+    return FileResponse(
+        path=str(zip_path),
+        media_type="application/zip",
+        filename=f"{job_id}_output.zip",
+        headers={"Cache-Control": "no-store"}
+    )

@@ -47,6 +47,17 @@ def parse_hotspots(user_str: str) -> str:
                 expanded.append("T" + re.findall(r"\d+", t)[0])
     return "[" + ",".join(expanded) + "]" if expanded else "[]"
 
+SETUP_SENTINEL = "/home/.rf_setup_done"
+
+def with_setup(cmd: str) -> str:
+    setup = f"""
+      if [ ! -f {SETUP_SENTINEL} ]; then
+        echo "[RFantibody setup] running include/setup.sh ..."
+        bash /home/include/setup.sh && touch {SETUP_SENTINEL} || exit 97
+      fi
+    """
+    return setup + "\n" + cmd
+
 def run_in_container(cmd: str, job_dir: Path, mem: str = "10g") -> Tuple[int, str]:
     
     client = docker.from_env()
@@ -114,7 +125,7 @@ def orchestrate_pipeline(
         f"inference.output_prefix={rfd_out_prefix}"
     ]
     cmd1 = " ".join(rfd_cmd)
-
+    cmd1 = with_setup(cmd1)
     code1, log1 = run_in_container(cmd1, job_dir)
     if code1 != 0:
         return {"status":"error","stage":"rfdiffusion","log":log1, "jobId": job_id}
@@ -129,6 +140,8 @@ def orchestrate_pipeline(
         f"-outpdbdir {mpnn_out}",
         f"-numseq {protein_mpnn_designs}",
     ])
+
+    cmd2 = with_setup(cmd2)
     code2, log2 = run_in_container(cmd2, job_dir)
     if code2 != 0:
         return {"status":"error","stage":"proteinmpnn","log":log2, "jobId": job_id}
@@ -140,6 +153,8 @@ def orchestrate_pipeline(
         f"input.pdb_dir={rf2_inp}",
         f"output.pdb_dir={rf2_out}"
     ])
+
+    cmd3 = with_setup(cmd3)
     code3, log3 = run_in_container(cmd3, job_dir)
     if code3 != 0:
         return {"status":"error","stage":"rf2","log":log3, "jobId": job_id}
@@ -148,12 +163,7 @@ def orchestrate_pipeline(
         f"/files/jobs/{job_id}/output"
     ]
     return {
-        "status":"ok",
+        "status": "ok",
         "jobId": job_id,
-        "artifacts": artifacts,
-        "logs": {
-            "rfdiffusion_tail": log1[-2000:],
-            "proteinmpnn_tail": log2[-2000:],
-            "rf2_tail": log3[-2000:],
-        }
+        "artifacts": [f"/api/jobs/{job_id}/archive"]
     }
