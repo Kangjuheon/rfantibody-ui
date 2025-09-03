@@ -1,6 +1,7 @@
 version: "3.9"
 
 services:
+  
   backend:
     build:
       context: ./backend
@@ -10,18 +11,13 @@ services:
       - "2782:2782"
     environment:
       - ALLOW_ORIGINS=http://localhost:2239
+      - JOBS_ROOT=/data/jobs
+      - RFANTIBODY_IMAGE=rfantibody:latest
+      - RF_WEIGHTS_HOST=./third_party/RFantibody/weights
     volumes:
       - ./backend:/app
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              # count: all         # 또는 1
-              capabilities: ["gpu"]
-              
-              device_ids: ["0"]
-
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
 
   frontend:
     build:
@@ -38,3 +34,10 @@ services:
       - /app/node_modules
     depends_on:
       - backend
+
+  rfantibody:
+    build:
+      context: ./third_party/RFantibody
+      dockerfile: Dockerfile
+    image: rfantibody:latest
+    profiles: ["builder"]

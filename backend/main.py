@@ -1,19 +1,19 @@
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, Dict, Any
-import os
+from typing import Dict, Any
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+import shutil, os
+
+from pipeline import orchestrate_pipeline
 
 app = FastAPI()
 
-# CORS (직접 호출 시 대비용; 프록시 환경에서는 필요 없지만 안전 차원)
-ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "http://localhost:2239").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in ALLOW_ORIGINS],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def save_upload(u: UploadFile) -> Path:
+    suffix = "_" + u.filename.replace("/", "_")
+    tmp = NamedTemporaryFile(delete=False, suffix=suffix)
+    with tmp as out:
+        shutil.copyfileobj(u.file, out)
+    return Path(tmp.name)
 
 @app.post("/rfantibody_pipeline")
 async def rfantibody_pipeline(
@@ -26,33 +26,25 @@ async def rfantibody_pipeline(
     frameworkFile: UploadFile = File(...),
     targetFile: UploadFile = File(...),
 ) -> Dict[str, Any]:
-    # 여기서 실제 파이프라인 로직을 수행하면 됨.
-    # 지금은 데모로 파일 이름/크기만 확인해서 돌려준다.
-    framework_bytes = await frameworkFile.read()
-    target_bytes = await targetFile.read()
-
-    result = {
-        "status": "ok",
-        "message": "Request received",
-        "job": {
-            "jobName": jobName,
-            "mode": mode,
-            "hotspots": hotspots,
-            "rfDiffusionDesigns": rfDiffusionDesigns,
-            "proteinMPNNDesigns": proteinMPNNDesigns,
-            "designLoops": designLoops,
-        },
-        "files": {
-            "frameworkFile": {
-                "filename": frameworkFile.filename,
-                "size_bytes": len(framework_bytes),
-            },
-            "targetFile": {
-                "filename": targetFile.filename,
-                "size_bytes": len(target_bytes),
-            },
-        },
-        # 실제 연산 결과가 있다면 여기에 경로/URL/메트릭 등을 담아 반환
-        "artifacts": [],  # e.g., ["s3://.../design_001.pdb"]
-    }
-    return result
+    fw = save_upload(frameworkFile)
+    tg = save_upload(targetFile)
+    try:
+        result = orchestrate_pipeline(
+            job_name=jobName,
+            mode=mode,
+            hotspots=hotspots,
+            rf_diffusion_designs=rfDiffusionDesigns,
+            protein_mpnn_designs=proteinMPNNDesigns,
+            design_loops=designLoops,
+            framework_path_host=fw,
+            target_path_host=tg,
+        )
+        return result
+    finally:
+        # 실패 시 임시파일 정리 (성공 시 orchestrate_pipeline 내부에서 job 디렉터리로 이동함)
+        if fw.exists() and fw.parent == Path("/tmp"):
+            try: fw.unlink()
+            except: pass
+        if tg.exists() and tg.parent == Path("/tmp"):
+            try: tg.unlink()
+            except: pass
