@@ -27,6 +27,14 @@ git clone https://github.com/Kangjuheon/rfantibody-ui.git
 cd rfantibody-ui
 ```
 
+3. Prepare RFAntibody
+```bash
+cd third_party/RFantibody
+bash include/download_weights.sh
+cd ../..
+docker compose --profile builder build rfantibody
+```
+
 3. Launch Docker containers
 ```bash
 docker compose up -d
